@@ -1,0 +1,74 @@
+---
+title: "Exercise Set 1"
+---
+
+## Problem 1
+
+### Task a
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+df = pd.read_csv("train.csv")
+
+```
+
+```{python}
+df.drop(columns=['id', 'partlybad'], inplace=True)
+```
+
+### Task b
+
+```{python}
+df[['T84.mean', 'UV_A.mean', 'CS.mean']].describe()
+```
+
+### Task c
+
+```{python}
+arr = df['T84.mean'].values
+mean = arr.mean()
+std = arr.std()
+print(f"Mean: {mean}, Std: {std}")
+```
+
+### Task d
+
+```{python}
+fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+
+axes[0].bar(df['class4'].value_counts().index, df['class4'].value_counts().values)
+axes[0].set_title('Class 4')
+axes[0].set_xlabel('Class 4')
+axes[0].set_ylabel('Count')
+
+axes[1].hist(df['CO242.mean'])
+axes[1].set_title('CO242 Mean')
+axes[1].set_xlabel('CO242 Mean')
+axes[1].set_ylabel('Count')
+
+plt.tight_layout()
+plt.show()
+
+```
+
+### Task e
+
+```{python}
+sns.pairplot(df[['UV_A.mean', 'T84.mean', 'H2O84.mean']])
+plt.show()
+```
+
+### Task f 
+```{python}
+most_common_class = df['class4'].value_counts().idxmax()
+p = (len(df) - df['class4'].value_counts()['nonevent']) / len(df)
+
+test = pd.read_csv("test.csv")
+submission = pd.DataFrame({'id': test['id'], 'class4': most_common_class, 'p': p})
+submission.to_csv("submission.csv", index=False)
+```
