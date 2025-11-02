@@ -1,5 +1,6 @@
 ---
 title: "Exercise Set 1"
+format: typst
 ---
 
 ## Problem 1
@@ -78,7 +79,11 @@ submission.to_csv("submission.csv", index=False)
 ### Task a
 
 ```{python}
-from sklearn.linear_model import 
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import KFold, cross_val_score
+
 
 train_syn = pd.read_csv("train_syn.csv")
 valid_syn = pd.read_csv("valid_syn.csv")
@@ -91,10 +96,65 @@ test_loss = []
 test_trva_loss = []
 cv_loss = []
 
-for degree in degrees:
-    model = 
-    
-    
 ```
 
-#
+``` {python}
+X_train = train_syn.drop(columns=['y'])
+y_train = train_syn['y']
+X_valid = valid_syn.drop(columns=['y'])
+y_valid = valid_syn['y']
+X_test = test_syn.drop(columns=['y'])
+y_test = test_syn['y']
+X_trva = pd.concat([X_train, X_valid], axis=0)
+y_trva = pd.concat([y_train, y_valid], axis=0)
+
+```
+
+```{python}
+def make_poly_ols(degree: int) -> Pipeline:
+    include_bias = True if degree == 0 else False
+    return Pipeline([
+        ("poly", PolynomialFeatures(degree=degree, include_bias=include_bias)),
+        ("scaler", StandardScaler()),
+        ("ols", LinearRegression())
+    ])
+
+def compute_loss(X_train: pd.DataFrame, y_train: pd.Series, X_test: pd.DataFrame, y_test: pd.Series) -> float:
+    model = make_poly_ols(degree)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    return np.mean((y_test - y_pred) ** 2)
+
+def cv_score_model(model: Pipeline, X: pd.DataFrame, y: pd.Series, cv: int = 10) -> float:
+    kf = KFold(n_splits=cv, shuffle=True, random_state=42)
+    scores = cross_val_score(model, X, y, scoring='neg_mean_squared_error', cv=kf)
+    return -scores.mean()
+
+def compute_all_losses(degree: int):    
+    train_loss.append(compute_loss(X_train, y_train, X_train, y_train))
+    valid_loss.append(compute_loss(X_train, y_train, X_valid, y_valid))
+    test_loss.append(compute_loss(X_train, y_train, X_test, y_test))
+    test_trva_loss.append(compute_loss(X_trva, y_trva, X_test, y_test))
+
+    model = make_poly_ols(degree)
+    model.fit(X_trva, y_trva)
+    cv_loss.append(cv_score_model(model, X_trva, y_trva))
+```
+
+```{python}
+for degree in degrees:
+    compute_all_losses(degree)
+
+results_df = pd.DataFrame({
+    'Degree': degrees,
+    'Train': train_loss,
+    'Valid': valid_loss,
+    'Test': test_loss,
+    'TRVA': test_trva_loss,
+    'CV': cv_loss
+}).set_index('Degree')
+print(results_df)
+```
+
+### Task b
+
