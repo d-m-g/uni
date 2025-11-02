@@ -72,3 +72,29 @@ test = pd.read_csv("test.csv")
 submission = pd.DataFrame({'id': test['id'], 'class4': most_common_class, 'p': p})
 submission.to_csv("submission.csv", index=False)
 ```
+
+## Problem 2
+
+### Task a
+
+```{python}
+from sklearn.linear_model import 
+
+train_syn = pd.read_csv("train_syn.csv")
+valid_syn = pd.read_csv("valid_syn.csv")
+test_syn = pd.read_csv("test_syn.csv")
+
+degrees = np.arange(0, 9)
+train_loss = []
+valid_loss = []
+test_loss = []
+test_trva_loss = []
+cv_loss = []
+
+for degree in degrees:
+    model = 
+    
+    
+```
+
+#
