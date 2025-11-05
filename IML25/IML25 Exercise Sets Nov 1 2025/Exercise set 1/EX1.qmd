@@ -270,3 +270,86 @@ print(results_df)
 | irreducible Error | Constant - noise in data cannot be reduced by any model | Constant | Constant |
 
 ### Task b
+
+```{python}
+def f(x):
+    return -2 - x + 0.5 * x**2
+
+epsilon_std = 0.4
+epsilon_mean = 0
+
+training_size = 1000
+set_size = 10
+training_sets = []
+
+results = pd.DataFrame(columns=['Degree', 'Irreducible', 'BiasSq', 'Variance', 'Total', 'MSE']).set_index('Degree')
+```
+
+```{python}
+def irreducible_error(y0, f0, y_pred):
+    return np.mean((y0 - f0) ** 2)
+
+def bias_squared(y0, f0, y_pred):
+    return (np.mean(y_pred) - f0) ** 2
+
+def variance(y0, f0, y_pred):
+    return np.mean((y_pred - np.mean(y_pred)) ** 2)
+
+def Total_error(y0, f0, y_pred):
+    return irreducible_error(y0, f0, y_pred) + bias_squared(y0, f0, y_pred) + variance(y0, f0, y_pred)
+
+def MSE(y0, y_pred):
+    return np.mean((y0 - y_pred) ** 2)
+```
+
+```{python}
+def make_poly_ols(degree: int) -> Pipeline:
+    include_bias = True if degree == 0 else False
+    return Pipeline([
+        ("poly", PolynomialFeatures(degree=degree, include_bias=include_bias)),
+        ("scaler", StandardScaler()),
+        ("ols", LinearRegression())
+    ])
+
+for i in range(training_size):
+    for j in range(set_size):
+        epsilon = np.random.normal(loc=epsilon_mean, scale=epsilon_std, size=set_size)
+        x = np.random.uniform(-3, 3, set_size)
+        y = f(x) + epsilon
+        training_sets.append((x, y))
+
+degrees = np.arange(0, 7)
+models = {}
+for degree in degrees:
+    model = make_poly_ols(degree)
+    model.fit(x.reshape(-1, 1), y)
+    models[degree] = model
+
+
+
+for degree, model in models.items(): 
+    stats = []
+    for train_set in training_sets:
+        x_train, y_train = train_set
+        model.fit(x_train.reshape(-1, 1), y_train)
+        test_x = 0
+        test_y = f(test_x) + np.random.normal(loc=epsilon_mean, scale=epsilon_std)
+        f0 = f(test_x)
+        y_pred = model.predict(np.array([[test_x]]))
+        stats.append((f0, y_pred[0], test_y))
+
+    f0_vals = stats[0][0]
+    y_pred_vals = np.array([stat[1] for stat in stats])
+    y_vals = np.array([stat[2] for stat in stats])
+
+    irr = irreducible_error(y_vals, f0_vals, y_pred_vals)
+    bias_sq = bias_squared(y_vals, f0_vals, y_pred_vals)
+    var = variance(y_vals, f0_vals, y_pred_vals)
+    total = Total_error(y_vals, f0_vals, y_pred_vals)
+    mse_val = MSE(y_vals, y_pred_vals)
+
+    results.loc[degree] = [irr, bias_sq, var, total, mse_val]
+
+print(results)
+```
+
