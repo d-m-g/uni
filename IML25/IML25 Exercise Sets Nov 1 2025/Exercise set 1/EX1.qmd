@@ -271,9 +271,13 @@ print(results_df)
 
 ### Task b
 
+#### i
+
 ```{python}
 def f(x):
     return -2 - x + 0.5 * x**2
+
+np.random.seed(42)
 
 epsilon_std = 0.4
 epsilon_mean = 0
@@ -353,3 +357,114 @@ for degree, model in models.items():
 print(results)
 ```
 
+#### ii
+
+```{python}
+x = degrees
+irr = results['Irreducible']
+bias_sq = results['BiasSq']
+var = results['Variance']
+mse = results['MSE']
+
+fig, axes = plt.subplots(2, 2, figsize=(10, 6))
+
+
+axes[0, 0].plot(x, irr, label='Irreducible Error', marker='o')
+axes[0, 0].set_ylim(0.0, 0.5)
+axes[0, 0].set_title('Irreducible Error vs Model Complexity', )
+axes[0, 1].plot(x, bias_sq, label='Bias^2', marker='o', color='red')
+axes[0, 1].set_title('Bias^2 vs Model Complexity')
+axes[1, 0].plot(x, var, label='Variance', marker='o', color='green')
+axes[1, 0].set_title('Variance vs Model Complexity')
+axes[1, 0].set_ylim(-0.10, 5.0)
+axes[1, 1].plot(x, mse, label='MSE', marker='o', color='orange')
+axes[1, 1].set_title('MSE vs Model Complexity')
+axes[1, 1].set_ylim(-0.50, 5.0)
+
+for ax in axes.flat:
+    ax.set_xlabel('Model Complexity (Polynomial Degree)')
+    ax.set_ylabel('Error')
+    ax.legend()
+
+fig.tight_layout()
+```
+
+#### iii
+The terms behave as expected:
+- Irreducible Error remains constant across all model complexities
+- Bias^2 decreases as model complexity increases
+- Variance increases with model complexity
+- MSE initially decreases, reaches a minimum, and then increases again, illustrating the bias-variance trade-off.
+
+## Problem 4
+
+
+
+## Problem 5
+
+### Task a
+
+```{python}
+d1 = pd.read_csv("d1.csv")
+d2 = pd.read_csv("d2.csv")
+d3 = pd.read_csv("d3.csv")
+d4 = pd.read_csv("d4.csv")
+```
+
+```{python}
+models = {}
+slopes = {}
+intercepts = {}
+rsquared = {}
+for i, data in enumerate([d1, d2, d3, d4], start=1):
+    model = LinearRegression()
+    model.fit(data[['x']], data['y'])
+    models[f'model_{i}'] = model
+    slopes[f'model_{i}'] = model.coef_[0]
+    intercepts[f'model_{i}'] = model.intercept_
+    rsquared[f'model_{i}'] = model.score(data[['x']], data['y'])
+
+results_df = pd.DataFrame({
+    'Model': list(models.keys()),
+    'Slope': list(slopes.values()),
+    'Intercept': list(intercepts.values()),
+    'R^2': list(rsquared.values())
+}).set_index('Model')
+
+print(results_df)
+
+
+```
+
+it's not safe to conclude that even with positive slopes the x and y are positively correlated in all cases, becuase the linear regression only captures the trend of the data and not the actual distribution.
+
+
+### Task b
+```{python}
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+for i, (data, model) in enumerate(zip([d1, d2, d3, d4], models.values()), start=1):
+    row = (i - 1) // 2
+    col = (i - 1) % 2
+    ax = axes[row, col]
+    ax.scatter(data['x'], data['y'], color='blue', label='Data', alpha=0.5)
+    x_range = np.linspace(data['x'].min(), data['x'].max(), 100).reshape(-1, 1)
+    x_range_df = pd.DataFrame(x_range, columns=['x'])
+    y_pred = model.predict(x_range_df)
+    ax.plot(x_range, y_pred, color='red', label='Fitted Line')
+    ax.set_title(f'Model {i}')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.legend()
+plt.tight_layout()
+```
+
+While the fitted lines looks similar across all four datasets, the underlying data distributions are quite different. So it's not safe to conclude that even with positive slopes the x and y are positively correlated in all cases. This is clearly shown in dataset 2.
+
+
+### Task c
+
+1. Dataset 1:
+    - Non
+2. Dataset 2:
+    - Non-linearity of the data
+    
