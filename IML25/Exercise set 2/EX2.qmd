@@ -1,3 +1,12 @@
+---
+title: "Exercise Set 2"
+format: typst
+execute: 
+  echo: false
+  warning: false
+  error: true
+---
+
 ## Problem 8
 
 ### Task a
@@ -39,7 +48,6 @@ print("Coefficients:" , coefficients)
 
 ```{python}
 t = model.decision_function(X_train)
-prob_aidele = model.predict_proba(X_train)
 
 adelie_index = np.where(model.classes_ == "Adelie")[0][0]
 p_adelie = model.predict_proba(X_train)[:, adelie_index]
@@ -57,7 +65,7 @@ plt.show()
 ### Task b
 
 ```{python}
-model_reg = LogisticRegression()
+model_reg = LogisticRegression(penalty="l1", solver="liblinear")
 model_reg.fit(X_train, y_train)
 y_pred_reg = model_reg.predict(X_test)
 ```
@@ -74,7 +82,6 @@ print("Coefficients:" , coefficients)
 
 ```{python}
 t = model_reg.decision_function(X_train)
-prob_aidele = model.predict_proba(X_train)
 
 adelie_index = np.where(model.classes_ == "Adelie")[0][0]
 p_adelie = model.predict_proba(X_train)[:, adelie_index]
@@ -88,3 +95,569 @@ plt.scatter(t[~mask_adelie], p_adelie[~mask_adelie], color="red", label="notAdel
 
 plt.show()
 ```
+
+### Task c
+
+The coefficients are large because the model is trying to push probabilities to 0 or 1.
+Coefficients: [[ 2.14948051e+01 -8.18056613e+01  1.97487470e+00  4.78735619e-02]] 
+
+## Problem 9
+
+Claim
+$$
+\text{For two classes and one feature, QDA is not linear if } \sigma_1^2 \ne \sigma_2^2.
+$$
+
+***
+$$
+x \mid y=k \sim \mathcal N(\mu_k, \sigma_k^2), \qquad k=1,2.
+$$
+
+$$
+p(y=1 \mid x) > p(y=2 \mid x)
+\quad \Longleftrightarrow \quad
+\pi_1 f_1(x) > \pi_2 f_2(x),
+$$
+
+where $\pi_k$ are class priors and
+
+$$
+f_k(x) = \frac{1}{\sqrt{2\pi}\sigma_k}
+\exp\left(-\frac{(x-\mu_k)^2}{2\sigma_k^2}\right).
+$$
+
+Thus, classify as class 1 if
+
+$$
+\pi_1 \frac{1}{\sigma_1}
+\exp\left(-\frac{(x-\mu_1)^2}{2\sigma_1^2}\right)
+\ > \
+\pi_2 \frac{1}{\sigma_2}
+\exp\left(-\frac{(x-\mu_2)^2}{2\sigma_2^2}\right).
+$$
+
+Taking natural logs:
+
+$$
+\log \pi_1 - \log \sigma_1 - \frac{(x-\mu_1)^2}{2\sigma_1^2}
+\ > \
+\log \pi_2 - \log \sigma_2 - \frac{(x-\mu_2)^2}{2\sigma_2^2}.
+$$
+
+Rearranging:
+
+$$
+\frac{(x-\mu_2)^2}{2\sigma_2^2}
++
+\frac{(x-\mu_1)^2}{2\sigma_1^2}
+\ > \
+\log\pi_2 - \log\pi_1 + \log\sigma_1 - \log\sigma_2.
+$$
+
+Expanding both squares:
+
+$$
+\frac{x^2 - 2\mu_2 x + \mu_2^2}{2\sigma_2^2}
+\;>\;
+\frac{x^2 - 2\mu_1 x + \mu_1^2}{2\sigma_1^2}
+$$
+
+for some constant C. Collecting terms in x:
+
+$$
+x^2\left(\frac{1}{2\sigma_2^2} - \frac{1}{2\sigma_1^2}\right)
++ x\left(\frac{\mu_1}{\sigma_1^2} - \frac{\mu_2}{\sigma_2^2}\right)
++ \left(\frac{\mu_2^2}{2\sigma_2^2} - \frac{\mu_1^2}{2\sigma_1^2}\right)
+> C.
+$$
+
+
+Because
+
+$$
+\sigma_1^2 \ne \sigma_2^2 \quad \Longrightarrow \quad
+\frac{1}{2\sigma_2^2} - \frac{1}{2\sigma_1^2} \ne 0,
+$$
+
+there is a nonzero coefficient for x^2. Therefore, the boundary is quadratic, not linear.
+
+***
+
+Conclusion
+
+$$
+\boxed{\text{QDA is not linear when } \sigma_1^2 \ne \sigma_2^2.}
+$$
+
+
+## Problem 10
+
+### Task a
+
+```{python}
+train_peng = train_peng
+test_peng = test_peng
+X_train = train_peng.drop(columns=["species"])
+y_train = train_peng["species"]
+X_test = test_peng.drop(columns=["species"])
+y_test = test_peng["species"]
+```
+
+```{python}
+train_peng_1_mean = X_train[train_peng["species"] == "Adelie"].mean()
+train_peng_0_mean = X_train[train_peng["species"] != "Adelie"].mean()
+train_peng_1_std = X_train[train_peng["species"] == "Adelie"].std()
+train_peng_0_std = X_train[train_peng["species"] != "Adelie"].std()
+print("Class 1 Mean:\n", train_peng_1_mean,"\n----")
+print("Class 0 Mean:\n", train_peng_0_mean,"\n----")
+print("Class 1 Std:\n", train_peng_1_std,"\n----")
+print("Class 0 Std:\n", train_peng_0_std,"\n----")
+```
+
+
+Prior 1 - Adelie, Prior 0 - notAdelie
+```{python}
+laplce_smoothing = 1
+prior_1 = (len(X_train[train_peng["species"] == "Adelie"]) + laplce_smoothing) / (len(X_train) + 2 * laplce_smoothing)
+prior_0 = (len(X_train[train_peng["species"] != "Adelie"]) + laplce_smoothing) / (len(X_train) + 2 * laplce_smoothing)
+print("Prior 1:", prior_1)
+print("Prior 0:", prior_0)
+```
+
+### Task b
+
+$$
+\begin{aligned}
+P(A \mid X) 
+&= \frac{P(X \mid A)\,P(A)}{P(X)} \\[6pt]
+&= \frac{
+P(\text{bill\_length} \mid A)\,
+P(\text{bill\_depth} \mid A)\,
+P(\text{flipper\_length} \mid A)\,
+P(\text{body\_mass} \mid A)\,
+P(A)
+}{P(X)} \\[6pt]
+&= \frac{
+\left[
+\prod_{j=1}^{4}
+\mathcal{N}(x_j \mid \mu_{A,j}, \sigma_{A,j})
+\right]
+P(A)
+}{P(X)}
+\end{aligned}
+$$
+
+### Task c
+
+```{python}
+class_mean = [train_peng_0_mean, train_peng_1_mean]
+class_std = [train_peng_0_std, train_peng_1_std]
+prior = [prior_0, prior_1]
+```
+```{python}
+#| echo: true
+def P_class_given_X(X, class_mean, class_std, prior, class_index):
+    mu = class_mean[class_index]
+    sigma = class_std[class_index]
+    coeff = 1 / (np.sqrt(2 * np.pi) * sigma)
+    exponent = np.exp(-0.5 * ((X - mu) / sigma) ** 2)
+    P_X_given_class = np.prod(coeff * exponent, axis=1)
+    return prior[class_index] * P_X_given_class
+
+def compute_probabilities(X, class_mean, class_std, prior):
+    P_0 = P_class_given_X(X, class_mean, class_std, prior, 0)
+    P_1 = P_class_given_X(X, class_mean, class_std, prior, 1)
+    total = P_0 + P_1
+    return P_0 / total, P_1 / total
+
+probs_adelie = compute_probabilities(X_test, class_mean, class_std, prior)[1]
+y_pred = (probs_adelie >= 0.5).astype(int)
+y_pred = np.where(y_pred == 1, "Adelie", "notAdelie")
+```
+
+```{python}
+accuracy = np.mean(y_pred == y_test.values)
+print("Classification accuracy on test set:", accuracy)
+```
+
+### Problem 11
+
+### Task a
+Discriminative learning is better according to the authors
+
+> "Discriminative classifiers are almost always to be
+preferred"
+
+### Task b
+
+“parametric family of probabilistic models” - a family of distributions p(x,y) that can be described by a finite set of parameters. 
+
+- The family where inputs are discrete (so joint p(x,y) is modeled via a multinomial / categorical model) — corresponding to discrete-feature classification. 
+- The family where inputs are continuous and (in their analysis) assumed to have Gaussian class-conditional distributions with diagonal covariance (or more generally, normal distributions). ￼
+
+Correspondingly:
+
+- $h_{\text{Gen}}$ is the classifier obtained by fitting the joint model $p(x,y)$ by maximizing the joint (log)-likelihood of data under that parametric family.  ￼
+- $h_{\text{Dis}}$ is the classifier obtained by fitting the conditional model $p(y \mid x)$ using the same parametric family — i.e. the discriminative analogue
+
+### Task c
+According to the last paragraph of the Introduction, Figure 1 suggests that as the number of training examples grows, error curves for the generative and discriminative classifiers cross: for small sample sizes the generative classifier (naive Bayes) has lower error, but as sample size increases the discriminative classifier (logistic regression) overtakes and has lower error.
+
+### Problem 12
+
+### Task a
+
+$$ 
+\begin{aligned}
+p(y=1 \mid x_1, x_2) = \sigma(0.1 - 2x_1 + x_2 + 0.2x_1x_2)
+\end{aligned}
+$$
+
+When generating probabilities there exists an interaction term between features $x_1$ and $x_2$: $0.2x_1x_2$. Therefore NB assumption of feature independence is violated. 
+
+### Task b
+
+```{python}
+train = {}
+ns = [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+models = ["NB", "LR", "LRi", "OptimalBayes", "Dummy"]
+res_acc = pd.DataFrame(index=ns, columns=models, dtype=float)
+res_ppl = pd.DataFrame(index=ns, columns=models, dtype=float)
+
+for n in ns:
+    train[n] = pd.read_csv(f"data_E2/toy_train_{n}.csv")
+
+X_test = pd.read_csv("data_E2/toy_test.csv")[["x1", "x2"]]
+y_test = pd.read_csv("data_E2/toy_test.csv")["y"]
+```
+
+```{python}
+#| echo: true
+def optimal_bayes_probs(X):
+    linear_combination = 0.1 - 2 * X["x1"] + X["x2"] + 0.2 * X["x1"] * X["x2"]
+    return 1 / (1 + np.exp(-linear_combination))
+
+def optimal_bayes_classifier(X):
+    probs = optimal_bayes_probs(X)
+    return (probs >= 0.5).astype(int)
+```
+
+```{python}
+from sklearn.naive_bayes import GaussianNB
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import accuracy_score, log_loss
+
+for n in ns:
+    X_train = train[n][["x1", "x2"]]
+    y_train = train[n]["y"]
+    
+    
+    # Naive Bayes
+    model_nb = GaussianNB()
+    model_nb.fit(X_train, y_train)
+    y_proba_nb = model_nb.predict_proba(X_test)[:, 1]
+    y_pred_nb = (y_proba_nb >= 0.5).astype(int)
+    res_acc.loc[n, "NB"] = accuracy_score(y_test, y_pred_nb)
+    res_ppl.loc[n, "NB"] = np.exp(log_loss(y_test, y_proba_nb))
+    
+    # Logistic Regression
+    model_lr = LogisticRegression(fit_intercept=True)
+    model_lr.fit(X_train, y_train)
+    y_proba_lr = model_lr.predict_proba(X_test)[:, 1]
+    y_pred_lr = (y_proba_lr >= 0.5).astype(int)
+    res_acc.loc[n, "LR"] = accuracy_score(y_test, y_pred_lr)
+    res_ppl.loc[n, "LR"] = np.exp(log_loss(y_test, y_proba_lr))
+
+    
+    # Logistic Regression with Interaction
+    X_train_inter = X_train.copy()
+    X_train_inter["x1_x2"] = X_train["x1"] * X_train["x2"]
+    X_test_inter = X_test.copy()
+    X_test_inter["x1_x2"] = X_test["x1"] * X_test["x2"]
+    
+    model_lri = LogisticRegression(fit_intercept=True)
+    model_lri.fit(X_train_inter, y_train)
+    y_proba_lri = model_lri.predict_proba(X_test_inter)[:, 1]
+    y_pred_lri = (y_proba_lri >= 0.5).astype(int)
+    res_acc.loc[n, "LRi"] = accuracy_score(y_test, y_pred_lri)
+    res_ppl.loc[n, "LRi"] = np.exp(log_loss(y_test, y_proba_lri))
+    
+    # Optimal Bayes Classifier
+    y_proba_ob = optimal_bayes_probs(X_test)
+    y_pred_ob = (y_proba_ob >= 0.5).astype(int)
+    res_acc.loc[n, "OptimalBayes"] = accuracy_score(y_test, y_pred_ob)
+    res_ppl.loc[n, "OptimalBayes"] = np.exp(log_loss(y_test, y_proba_ob))
+    
+    # Dummy Classifier
+    model_dummy = DummyClassifier(strategy="stratified")
+    model_dummy.fit(X_train, y_train)
+    y_proba_dummy = model_dummy.predict_proba(X_test)[:, 1]
+    y_pred_dummy = (y_proba_dummy >= 0.5).astype(int)
+    res_acc.loc[n, "Dummy"] = accuracy_score(y_test, y_pred_dummy)
+    res_ppl.loc[n, "Dummy"] = np.exp(log_loss(y_test, y_proba_dummy))
+```
+NB - `sklearn.naive_bayes.GaussianNB()`.  
+LR - `sklearn.linear_model.LogisticRegression()`.  
+LRi - `sklearn.linear_model.LogisticRegression()` with interaction term.  
+Dummy Classifier - `sklearn.dummy.DummyClassifier(strategy="stratified")`.  
+```{python}
+print("Accuracy:")
+print(res_acc)
+
+print("\nPerplexity:")
+print(res_ppl)
+```
+
+### Task c
+
+```{python}
+largest_lri_coeffs = model_lri.coef_
+largest_lri_intercept = model_lri.intercept_
+coeffs = [largest_lri_intercept[0], largest_lri_coeffs[0][0], largest_lri_coeffs[0][1], largest_lri_coeffs[0][2]]
+print("Logistic Regression with Interaction Coefficients:", *coeffs)
+print("Original Coefficients: 0.1, -2, 1, 0.2")
+```
+We can see that model got very close to the original coefficients used to generate the data.
+
+Probabilistic models - All
+
+Discriminative models:
+
+- LR
+- LRi
+
+Generative models:
+- NB
+
+With small n, Naive Bayes often outperforms logistic regression (same pattern as Ng & Jordan 2001).
+With large n, logistic regression with the interaction term dominates, and approaches the performance of Optimal Bayes.
+Perplexity (log-loss) highlights probability quality; models without the interaction term score worse in perplexity even when classification accuracy looks ok.
+
+NB learns parameters faster from small datasets (higher bias, low variance).
+LR converges more slowly but achieves better asymptotic performance.
+
+A model that includes this interaction matches the true function class, so as more data come in, it converges to the true parameters and thus becomes nearly optimal.
+
+Dummy may beat LR without interaction when n is very small, because LR without interaction overfits or is too uncertain (not the case in this problem). Same for Optimal Bayes when n is very small some model can get "lucky" with few samples and outperform it but in general Optimal Bayes is the best as it uses the true data generating process.
+
+## Problem 13
+
+Dataset was taken from .rmd file provided in the exercise.
+The 
+```{python}
+dataset = [{'x1': 0.620501, 'x2': 0.264871, 'class': 0},
+{'x1': 0.481113, 'x2': 0.769055, 'class': 0},
+{'x1': 0.102307, 'x2': 1.971407, 'class': 0},
+{'x1': 0.156592, 'x2': 2.976682, 'class': 0},
+{'x1': 0.518891, 'x2': 2.179949, 'class': 0},
+{'x1': 0.683016, 'x2': 3.428128, 'class': 0},
+{'x1': 0.207163, 'x2': 1.035027, 'class': 0},
+{'x1': 0.791339, 'x2': 0.764098, 'class': 0},
+{'x1': 3.850581, 'x2': 3.918894, 'class': 1},
+{'x1': 2.939205, 'x2': 3.606002, 'class': 1},
+{'x1': 2.300595, 'x2': 2.344624, 'class': 1},
+{'x1': 3.830532, 'x2': 2.682938, 'class': 1},
+{'x1': 1.231078, 'x2': 3.595708, 'class': 1},
+{'x1': 3.673700, 'x2': 2.762626, 'class': 1},
+{'x1': 3.468439, 'x2': 3.038464, 'class': 1},
+{'x1': 3.065040, 'x2': 0.187744, 'class': 0},
+{'x1': 3.300461, 'x2': 0.257943, 'class': 0},
+{'x1': 2.682821, 'x2': 1.077976, 'class': 0},
+{'x1': 1.763214, 'x2': 1.406233, 'class': 1},
+{'x1': 2.224992, 'x2': 1.198118, 'class': 0},
+{'x1': 3.331778, 'x2': 1.585982, 'class': 0},
+{'x1': 3.935497, 'x2': 1.184285, 'class': 0},
+{'x1': 2.084279, 'x2': 0.757185, 'class': 0}]
+
+X1 = np.array([d['x1'] for d in dataset])
+X2 = np.array([d['x2'] for d in dataset])
+Y  = np.array([d['class'] for d in dataset])
+
+plt.figure(figsize=(7, 5))
+for data_point in dataset:
+    x1 = data_point['x1']
+    x2 = data_point['x2']
+    cls = data_point['class']
+    if cls == 1:
+        plt.scatter(x1, x2, color="red", marker="x", s=100, label="Class 1" if "Class 1" not in plt.gca().get_legend_handles_labels()[1] else "")
+    else:
+        plt.scatter(x1, x2, color="black", marker="o", s=100, label="Class 0" if "Class 0" not in plt.gca().get_legend_handles_labels()[1] else "")
+plt.axvline(x=1, color='green')
+plt.hlines(y=2, xmin=1, xmax=4, color='green', linewidth=2)
+plt.vlines(x=2, ymin=0, ymax=2, color='green', linewidth=2)
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+Dataset was taken from .rmd file provided in the exercise.
+The splits created by the given decision tree is shown in green and it was not computed but chosen by hand. The Gini Coefficient for each split is can be found below.
+
+```{python}
+#| echo: true
+def gini(side):
+    if len(side)==0: return 0
+    p = np.mean(side==1)
+    return 2*p*(1-p)
+
+def split_gini(mask):
+    left = Y[mask]
+    right = Y[~mask]
+    n = len(Y)
+    return (len(left) / n) * gini(left) + (len(right) / n) * gini(right)
+```
+
+```{python}
+g1 = split_gini(X1 <= 1)
+
+right_mask = X1 > 1
+X2_right   = X2[right_mask]
+Y_right    = Y[right_mask]
+
+below = Y_right[X2_right <= 2]
+above = Y_right[X2_right > 2]
+
+g2 = (len(below)/len(Y)) * gini(below) + (len(above)/len(Y)) * gini(above) + (len(Y[~right_mask])/len(Y))*gini(Y[~right_mask])
+
+below_data_mask = (X1 > 1) & (X2 <= 2)
+below_X1 = X1[below_data_mask]
+below_Y  = Y[below_data_mask]
+
+left3  = below_Y[below_X1 <= 2]
+right3 = below_Y[below_X1 > 2]
+
+g3 = (len(left3)/len(Y))*gini(left3) + (len(right3)/len(Y))*gini(right3)
+
+print(f'Gini for first split: {g1} \nGini for second split: {g2} \nGini for third split: {g3}')   
+```
+
+## Problem 14
+
+### Task a
+Firstly lets visualize the dataset.
+```{python}
+D = {(0, 1),
+     (2, 1),
+     (3, -1),
+     (5, 1),
+     (6, 1),
+     (9, 1),
+     (12, 1),
+     (13, -1),
+     (18, -1),
+     (19, -1),
+     (21, -1)}
+
+plt.figure(figsize=(7, 5))
+for x, y in D:
+    if y == 1:
+        plt.scatter(x, 0, color="blue", marker="o", s=100, label="Class 1" if "Class 1" not in plt.gca().get_legend_handles_labels()[1] else "")
+    else:
+        plt.scatter(x, 0, color="red", marker="x", s=100, label="Class -1" if "Class -1" not in plt.gca().get_legend_handles_labels()[1] else "")
+        
+    plt.text(x, 0.01, str(x), ha='center', va='center')
+
+plt.yticks([])
+plt.xlabel("x")
+plt.legend()
+plt.show()
+```
+
+#### 1-NN
+Blue class (1) boundry $(-\infty,  2.5) \cup (4, 12.5)$  
+Red class (-1) boundry $(2.5, 4) \cup (12.5, \infty)$  
+
+#### 3-NN
+Blue class (1) boundry $(-\infty,  13.5)$  
+Red class (-1) boundry $(13.5, \infty)$  
+
+As 13 should be classified as 1 in 3-NN  ($13, 12, 9$ are the closest neighbors) and $18$ should be classified as -1 in 3-NN ($18, 19, 21$ are the closest neighbors). Near $13$ $13$ and $12$ are always the closest neighbors so we need to find the point where $18$ becomes closer than $9$. This happens at point $(18 + 9) / 2 = 13.5$.
+
+### Task b
+
+In general, the bigger the $k$ the smoother the decision boundary (less complex). With large $k$ the model is less sensitive to noise but might underfit the data. With small $k$ the model is more sensitive to noise and might overfit the data.
+
+Examples: with our dataset 1-NN overfits the data (there is an extra interval) while 13-NN would underfit the data (classifies all points as 1).
+
+## Problem 15
+
+
+### Task a
+```{python}
+
+data = {
+    "label": ["A","B","C","D","E","F","G","H"],
+    "x1": [-1.5, 0.0, 0.2, 2.0, 4.0, 4.0, 6.0, 7.0],
+    "x2": [0.0, 0.9, -1.8, 0.0, 1.0, -1.0, -0.5, -1.0],
+    "class": [1, 1, 1, 1, -1, -1, -1, -1]
+}
+
+plt.figure(figsize=(7, 5))
+for i in range(len(data["label"])):
+    x1 = data["x1"][i]
+    x2 = data["x2"][i]
+    cls = data["class"][i]
+    label = data["label"][i]
+    if cls == 1:
+        plt.scatter(x1, x2, color="blue", marker="o", s=100, label="Class 1" if "Class 1" not in plt.gca().get_legend_handles_labels()[1] else "")
+    else:
+        plt.scatter(x1, x2, color="red", marker="x", s=100, label="Class -1" if "Class -1" not in plt.gca().get_legend_handles_labels()[1] else "")
+    plt.text(x1, x2 + 0.2, label, ha='center', va='center')
+
+plt.axvline(x=3, color='green', linestyle='--')
+plt.grid(True)
+plt.legend()
+plt.show()
+```
+
+x1 - 3 = 0is equation for the hyperplane.
+Margin is 1.0 as the closest points to the hyperplane are D (2,0) and E (4,1) with distance 1.0.
+Support vectors are points D, E and F.
+
+### Task b and c
+```{python}
+points = [(0, 0), (-1, 1), (2, 2), (3, 8)]
+# Create grid
+x = np.linspace(-4, 4, 400)
+y = np.linspace(-2, 9, 400)
+X, Y = np.meshgrid(x, y)
+
+# Equation (circle)
+Z = (1 + X)**2 + (2 - Y)**2
+
+# Plot
+plt.figure(figsize=(7,7))
+
+plt.scatter(*zip(*points), color='black', zorder=5)
+
+# Region inside (≤4)
+plt.contourf(X, Y, Z, levels=[0,4], colors=['lightcoral'], alpha=0.5)
+
+# Region outside (>4)
+plt.contourf(X, Y, Z, levels=[4, 100], colors=['lightskyblue'], alpha=0.5)
+
+circle = plt.contour(X, Y, Z, levels=[4], colors='black', linewidths=2)
+
+# Labels and title
+plt.xlabel("$X_1$")
+plt.ylabel("$X_2$")
+plt.title(r"$(1+X_1)^2 + (2-X_2)^2 = 4$")
+
+plt.legend()
+plt.gca().set_aspect('equal', adjustable='box')
+plt.grid(True)
+plt.show()
+
+```
+
+### Task c
+
+$$
+(1 + x_1)^2 + (2 - x_2)^2 = x_1^2 + x_2^2 + 2x_1 - 4x_2 + 5 = 4
+$$
+
+if we assign $Z_1 = x_1$, $Z_2 = x_2$, $Z_3 = x_1^2$, $Z_4 = x_2^2$ we get 
+$$
+Z_3 + Z_4 + 2Z_1 - 4Z_2 + 1 = 0
+$$
+which is a linear equation in the new feature space.
