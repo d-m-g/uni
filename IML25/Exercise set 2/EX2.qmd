@@ -1,6 +1,6 @@
 ---
 title: "Exercise Set 2"
-format: typst
+format: pdf
 execute: 
   echo: false
   warning: false
@@ -188,6 +188,8 @@ Conclusion
 $$
 \boxed{\text{QDA is not linear when } \sigma_1^2 \ne \sigma_2^2.}
 $$
+
+
 
 
 ## Problem 10

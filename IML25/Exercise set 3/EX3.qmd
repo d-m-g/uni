@@ -1,0 +1,462 @@
+---
+title: "Exercise Set 3"
+format: pdf
+execute: 
+  echo: false
+  warning: false
+  error: true
+---
+
+## Problem 17
+
+### Task a
+
+1. k-means algorithm is used for clustering problems, where the goal is to split the data points into k clusters based on their features.
+2. Inputs are the number of clusters k and the dataset. The output is the assignment of each data point to one of the k clusters and the centroids of the clusters.
+3. The results can be interpreted as each cluster representing a group of similar data points, with the centroid being the average position of all points in that cluster.
+
+### Task b
+
+Cost of the k-means algorithm is $\mathcal{L} = \sum_{i=1}^{n}  \| x_i - \mu_{c(i)} \|^2$ where $c_i$ is the cluster assigned to point $x_i$ and $\mu_{c(i)}$ is the centroid of that cluster.
+
+During the assignment step, the cost $\mathcal{L}$ can only decrease or stay the same because each point is assigned to the nearest centroid, minimizing the distance for that point.
+
+### Task c 
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
+x = np.array([0, 1, 4, 5, 5])
+y = np.array([1, 2, 5, 3, 4])
+```
+
+```{python}
+k = 2
+centroids = np.array([[1, 4], [4, 1]])
+```
+
+Calculation procedure at each step:
+```{python}
+#|echo: true
+def assign_clusters(x, y, centroids):
+    clusters = []
+    for i in range(len(x)):
+        distances = [float(np.sqrt((x[i] - centroids[j][0])**2 + (y[i] - centroids[j][1])**2)) for j in range(len(centroids))]
+        clusters.append(int(np.argmin(distances)))
+        formatted_distances = [f"{d:.4g}" for d in distances]
+        print (f"Point ({x[i]}, {y[i]}) distances to centroids: {formatted_distances}, assigned to cluster {clusters[-1]}")
+    print("------------")
+    return clusters
+
+def update_centroids(x, y, clusters, k):
+    new_centroids = []
+    for i in range(k):
+        points = [(int(x[j]), int(y[j])) for j in range(len(x)) if clusters[j] == i]
+        if points:
+            new_centroids.append(np.mean(points, axis=0))
+        else:
+            new_centroids.append(centroids[i])
+        formatted_centroid = [f"{x:.4g}" for x in new_centroids[-1]]
+        print(f"Cluster {i} points: {points}, new centroid: {formatted_centroid}")
+    print("============")
+    return np.array(new_centroids)
+
+```
+
+
+```{python}
+def kmeans(x, y, k, centroids, max_iters=3):
+    for _ in range(max_iters):
+        clusters = assign_clusters(x, y, centroids)
+        centroids = update_centroids(x, y, clusters, k)
+    return clusters, centroids
+```
+
+```{python}
+clusters, final_centroids = kmeans(x, y, k, centroids)
+print("Final clusters:", clusters)
+print("Final centroids:", final_centroids.tolist())
+
+# Visualization
+plt.scatter(x, y, c=clusters, cmap='cividis')
+plt.scatter(final_centroids[:, 0], final_centroids[:, 1], s=200, c='red', marker='X')
+plt.title('K-means Clustering')
+plt.xlabel('X-axis')
+plt.ylabel('Y-axis')
+plt.show()
+```
+
+## Problem 18
+
+### Task a and b
+
+```{python}
+x = np.array([0.5, 2.5, 4.2, 5.5, 4.8, 7.0, 8.5])
+y = np.array([2.0, 3.0, 0.7, 0.3, 3.5, 2.5, 2.8])
+
+pairwise_distances = pd.DataFrame(index=range(len(x)), columns=range(len(x)))
+for i in range(len(x)):
+    for j in range(len(x)):
+        pairwise_distances.iloc[i, j] = np.sqrt((x[i] - x[j])**2 + (y[i] - y[j])**2)
+
+print("Pairwise Distance Matrix:")
+print(pairwise_distances)
+```
+
+
+```{python}
+def get_distance(link, cluster_a, cluster_b, pairwise_distances):
+    if link == 'single':
+        return min(pairwise_distances.iloc[i, j] for i in cluster_a for j in cluster_b)
+    elif link == 'complete':
+        return max(pairwise_distances.iloc[i, j] for i in cluster_a for j in cluster_b)
+
+
+def hierarchical_clustering(x, y, link, pairwise_distances):
+    clusters = [[i] for i in range(len(x))]
+    while len(clusters) > 1:
+        min_distance = float('inf')
+        to_merge = (0, 0)
+        for i in range(len(clusters)):
+            for j in range(i + 1, len(clusters)):
+                distance = get_distance(link, clusters[i], clusters[j], pairwise_distances)
+                if distance < min_distance:
+                    min_distance = distance
+                    to_merge = (i, j)
+        i, j = to_merge
+        cluster_i_points = clusters[i]
+        cluster_j_points = clusters[j]
+        print(f"Merging clusters containing points {cluster_i_points} and {cluster_j_points} "f"with distance {min_distance:.4g}")
+        clusters[i].extend(clusters[j])
+        del clusters[j]
+    return clusters
+```
+
+```{python}
+print("Single Link Clustering:")
+hierarchical_clustering(x, y, 'single', pairwise_distances)
+
+# Dendrogram
+from scipy.cluster.hierarchy import dendrogram, linkage
+import matplotlib.pyplot as plt
+from scipy.spatial.distance import squareform
+
+arr = pairwise_distances.to_numpy(dtype=float)
+condensed = squareform(arr)
+Z = linkage(condensed, method='single')
+dendrogram(Z, color_threshold=0)
+plt.title('Dendrogram Single Link')
+plt.xlabel('Sample index')
+plt.ylabel('Distance')
+plt.show()
+
+print("\nComplete Link Clustering:")
+hierarchical_clustering(x, y, 'complete', pairwise_distances)
+
+
+Z = linkage(condensed, method='complete')
+dendrogram(Z, color_threshold=0)
+plt.title('Dendrogram Complete Link')
+plt.xlabel('Sample index')
+plt.ylabel('Distance')
+plt.show()
+```
+
+## Problem 19
+
+```{python}
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+data = pd.read_csv('train.csv')
+data.drop(columns=['id', 'date', 'partlybad'], inplace=True)
+```
+
+### Task a
+
+```{python}
+from sklearn.preprocessing import LabelEncoder
+X = data.drop(columns=['class4'])
+y = data['class4']
+
+le = LabelEncoder()
+y_num = le.fit_transform(y)  
+
+n = range(1, 21)
+kmeans_loss = []
+for k in n:
+    model = kmeans = KMeans(n_clusters=k, random_state=42)
+    model.fit(X)
+    kmeans_loss.append(model.inertia_)
+plt.plot(n, kmeans_loss, marker='o')
+plt.xlabel("Number of clusters (k)")
+plt.ylabel("K-means Loss (Inertia)")
+plt.title("K-means Loss vs Number of Clusters (No normalization)")
+plt.xticks(range(1, 21, 2))
+plt.grid(True)
+plt.show()
+```
+
+```{python}
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+n = range(1, 21)
+kmeans_loss_scaled = []
+for k in n:
+    model = kmeans = KMeans(n_clusters=k, random_state=42)
+    model.fit(X_scaled)
+    kmeans_loss_scaled.append(model.inertia_)
+plt.plot(n, kmeans_loss_scaled, marker='o')
+plt.xlabel("Number of clusters (k)")
+plt.ylabel("K-means Loss (Inertia)")
+plt.title("K-means Loss vs Number of Clusters (With normalization)")
+plt.xticks(range(1, 21, 2))
+plt.grid(True)
+plt.show()
+```
+
+We can see the normalization significantly affects the k-means loss values. This happens because some values are significant;y larger in magnitude compared to others, which means the distance between them is larger as well. After normalization, all features contribute equally to the distance calculations, leading to a more balanced clustering outcome.
+
+### Task b
+
+```{python}
+from sklearn.metrics import confusion_matrix
+from scipy.optimize import linear_sum_assignment
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+k = 4
+kmeans = KMeans(
+    n_clusters=4,
+    init="random",     
+    n_init=1,          
+    random_state=42
+)
+
+kmeans.fit(X_scaled)
+
+clusters = kmeans.labels_
+
+cm = confusion_matrix(y_num, clusters)
+
+row_ind, col_ind = linear_sum_assignment(cm.max() - cm)
+cm_reordered = cm[:, col_ind]
+cm_reordered_df = pd.DataFrame(
+    cm_reordered,
+    index=[f"class {c}" for c in sorted(y.unique())],
+    columns=[f"cluster {j}" for j in col_ind]
+)
+
+print("Confusion Matrix (after optimal assignment):")
+print(cm_reordered_df)
+```
+
+From confusion matrix we see that k-means can't cluster Ia correctly at all. Class II has a lot of erros as well as nonevent class. Class Ib is clustered best.
+
+### Task c
+
+```{python}
+losses = []
+
+for seed in range(1000):
+    km = KMeans(
+        n_clusters=4,
+        init="random",
+        n_init=1,
+        random_state=seed
+    )
+    km.fit(X_scaled)
+    losses.append(km.inertia_)
+
+plt.hist(losses, bins=30, edgecolor='black')
+plt.xlabel("k-means loss (inertia)")
+plt.ylabel("Frequency")
+plt.title("Distribution of losses over 1000 random initialisations")
+plt.show()
+
+best_loss = np.min(losses)
+worst_loss = np.max(losses)
+
+print("Best loss:", best_loss)
+print("Worst loss:", worst_loss)
+
+good_loss_threshold = best_loss * 1.01
+count_good = sum(l <= good_loss_threshold for l in losses)
+prob_good = count_good / 1000
+
+expected_restarts = 1 / prob_good
+print("Expected number of random initialisations needed:", expected_restarts)
+```
+
+## Problem 20
+
+
+
+```{python}
+pca = PCA(n_components=2)
+class4 = data['class4']
+x = data.drop(columns=['class4'])
+pca_result = pca.fit_transform(x)
+pve = pca.explained_variance_ratio_
+print("Explained variance ratio:", pve)
+```
+
+```{python}
+unique_classes = np.unique(class4)
+colours = ['red', 'blue', 'green', 'orange']
+markers = ['o', 's', '^', 'D']
+
+plt.figure(figsize=(8,6))
+
+for idx, cls in enumerate(unique_classes):
+    mask = (class4 == cls)
+    plt.scatter(
+        pca_result[mask, 0],
+        pca_result[mask, 1],
+        c=colours[idx],
+        marker=markers[idx],
+        label=f"Class {cls}",
+        edgecolor='black',
+        s=80
+    )
+
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.title("PCA Projection to 2D")
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+### Task b
+
+```{python}
+pca = PCA()
+pve = pca.fit(x).explained_variance_ratio_
+cum_pve = np.cumsum(pve)
+
+plt.figure(figsize=(10,5))
+
+# PVE plot
+plt.subplot(1,2,1)
+plt.plot(pve, marker='o')
+plt.title("PVE (Unscaled Data)")
+plt.xlabel("Principal Component")
+plt.ylabel("Proportion of Variance Explained")
+
+# Cumulative PVE plot
+plt.subplot(1,2,2)
+plt.plot(cum_pve, marker='o')
+plt.title("Cumulative PVE (Unscaled Data)")
+plt.xlabel("Principal Component")
+plt.ylabel("Cumulative Variance Explained")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+
+x_scaled = scaler.fit_transform(x)
+
+pca_scaled = PCA()
+pve_scaled = pca_scaled.fit(x_scaled).explained_variance_ratio_
+cum_pve_scaled = np.cumsum(pve_scaled)
+
+plt.figure(figsize=(7,5))
+
+plt.subplot(1,2,1)
+plt.plot(pve_scaled, marker='o')
+plt.title("PVE (Standardised Data)")
+plt.xlabel("Principal Component")
+plt.ylabel("Proportion of Variance Explained")
+
+plt.subplot(1,2,2)
+plt.plot(cum_pve_scaled, marker='o')
+plt.title("Cumulative PVE (Standardised Data)")
+plt.xlabel("Principal Component")
+plt.ylabel("Cumulative Variance Explained")
+
+plt.tight_layout()
+plt.show()
+```
+Without normalization some features are extremely large in value compared to others, so PCA focuses on those features. After normalization, all features contribute equally to the variance, leading to a more balanced PCA result.
+
+### Task c
+
+I decided to use k-NN classifier because it is simple and effective for multi-class classification problems. As the metric, I chose accuracy because it provides a straightforward measure of how well the classifier performs by calculating the proportion of correctly classified instances.
+
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score
+
+X = data.drop(columns=['class4'])
+y = data['class4']
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.5, random_state=42, stratify=y
+)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+```
+
+```{python}
+
+knn = KNeighborsClassifier(n_neighbors=5)
+knn.fit(X_train_scaled, y_train)
+
+y_pred = knn.predict(X_val_scaled)
+acc_no_pca = accuracy_score(y_val, y_pred)
+print(f"Accuracy without PCA: {acc_no_pca:.4f}")
+```
+
+```{python}
+idx = np.arange(len(X))
+train_idx, val_idx = train_test_split(idx, test_size=0.5, random_state=42, stratify=y)
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+y_val_split   = y.iloc[val_idx]
+```
+
+```{python}
+dims = range(1, 51) 
+accuracies = []
+
+for k in dims:
+    Z = PCA(n_components=k).fit_transform(X_scaled)
+
+    Z_train = Z[train_idx]
+    Z_val   = Z[val_idx]
+
+    y_train_split = y.iloc[train_idx]
+    y_val_split   = y.iloc[val_idx]
+
+    knn = KNeighborsClassifier(n_neighbors=5)
+    knn.fit(Z_train, y_train_split)
+
+    y_pred = knn.predict(Z_val)
+    accuracies.append(accuracy_score(y_val_split, y_pred))
+
+plt.plot(dims, accuracies, marker='o')
+plt.xlabel("Number of PCA components")
+plt.ylabel("Validation accuracy")
+plt.title("Accuracy vs PCA dimensionality")
+plt.grid(True)
+plt.show()
+
+print(f"Maximum accuracy of {max(accuracies):.4f} achieved with {accuracies.index(max(accuracies)) + 1} PCA components.")
+```
+
+## Problem 21
+
+This weeks topics were quite new to me so I spent more time understanding them and doing the exercises than previous exercise set. PCA was the most confusing topic. As i want to go further in ML and AI in my work this whole course is perfect for me and i find it very useful. The topics also help with term project.
