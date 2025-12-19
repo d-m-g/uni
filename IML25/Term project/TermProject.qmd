@@ -1,0 +1,916 @@
+---
+title: "Term Project IML"
+format: pdf
+execute: 
+  echo: false
+  warning: false
+  error: true
+---
+**Group 33: Dmitrii Gorovoi (Kaggle: GorovoiD)**
+
+
+## Introduction 
+The goal of the NPF Challenge is to classify events detected in the atmosphere using data provided. The events are categorized into four classes:
+
+* "nonevent",
+* "Ia",
+* "Ib",
+* "II".
+
+While "Ia", "Ib", and "II" represent different types of occurrence of NPF, "nonevent" indicates the absence of NPF event. This is a multi-class classification problem where we need to assign each observation to one of the four classes based on the features provided in the dataset.
+
+We are required to produce in general 3 outputs: "nonevent" vs "event", type of an event, and probability of being event (non-event) occurring.
+
+My first approach was to treat this as a multi-class classification problem with 4 classes: "nonevent", "Ia", "Ib", "II", however as it will be shown it did not yield good results. Therefore I decided to treat this as 2-step problem: first classify "nonevent" vs "event" and then classify the event class into "Ia", "Ib", "II".
+
+{{< pagebreak >}}
+
+## Data Exploration
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import StandardScaler
+from scipy.stats import zscore
+from sklearn.feature_selection import f_classif
+from scipy.cluster.hierarchy import fcluster, linkage
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+
+from sklearn.model_selection import StratifiedKFold, cross_validate, RandomizedSearchCV
+
+from sklearn.svm import LinearSVC
+
+from kaggle_metric import score as kaggle_score
+from sklearn.neighbors import KNeighborsClassifier
+```
+
+```{python}
+data_train = pd.read_csv("train.csv")
+data_test = pd.read_csv("test.csv")
+train = data_train.drop(columns=["id", "partlybad", "date"])
+test = data_test.drop(columns=["id", "partlybad", "date"])
+
+data_features = train.keys()[1::]
+```
+
+The initial look at the data shows that there are 50 variables where each has mean and std values therefore there are 100 features in total.
+
+```{python}
+X_train = train.drop(columns=["class4"])
+y_train = train["class4"]
+
+le = LabelEncoder()
+y_num = le.fit_transform(y_train)
+labels = le.classes_
+# print(labels)
+
+classes = np.unique(y_num)
+colors  = ['red', 'blue', 'green', 'orange']
+markers = ['o', 's', '^', 'D']
+```
+
+```{python}
+#|include: false
+# for feature in data_features:
+#   x = X_train[feature]
+#   for idx, cls in enumerate(classes):
+#       mask = (y_num == cls)
+#       # jitter around the class index so points do not overlap
+#       jitter = np.random.uniform(-0.1, 0.1, size=np.sum(mask))
+#       plt.scatter(
+#           x[mask],
+#           np.full(np.sum(mask), cls) + jitter,
+#           c=colors[idx],
+#           marker=markers[idx],
+#           label=f"Class {cls}",
+#           s=40,
+#           alpha=0.8
+#       )
+
+#   plt.xlabel(feature)
+#   plt.ylabel("Class")
+#   plt.yticks(classes)
+#   plt.title("Scatter plot of x vs class (with jitter)")
+#   plt.legend()
+#   plt.grid(True, linestyle="-", alpha=0.3)
+#   plt.show()
+```
+
+```{python}
+counts = y_train.value_counts().sort_index()
+
+plt.figure(figsize=(6,4))
+bars = counts.plot(kind="bar")
+
+for i, v in enumerate(counts):
+    plt.text(i, v, str(v), ha="center", va="bottom")
+
+  
+plt.xlabel("Class")
+plt.ylabel("Count")
+plt.xticks(rotation=45)
+plt.title("Class distribution")
+plt.show()
+```
+
+As can be seen from the bar plot , the dataset is has some imbalance with "nonevent" having the highest number of samples and "Ia" having the lowest. This means that some algorithms can be biased towards the majority class because 26 vs 225 is a significant difference.
+
+I descided to use ANOVA F-test to evaluate the importance of each feature. While this method has a limitation of assuming the independence of features, it is a good starting point for feature selection in classification problems. Here are the top 10 features based on the ANOVA F-test:
+```{python}
+
+f_scores, p_values = f_classif(X_train, y_num)
+sorted_idx = np.argsort(f_scores)[::-1]
+sorted_features = data_features[sorted_idx]
+sorted_f = f_scores[sorted_idx]
+sorted_p = p_values[sorted_idx]
+
+print("Top 10 features based on ANOVA F-test:")
+for feature, f_score, p_value in zip(sorted_features[:10], sorted_f[:10], sorted_p[:10]):
+    print(f"{feature}\tF-score: {f_score:.4f}\tp-value: {p_value:.4e}")
+# print("Feature\tF-score\tp-value")
+# for feature, f_score, p_value in zip(sorted_features, sorted_f, sorted_p):
+#     print(f"{feature}\t{f_score:.4f}\t{p_value:.4e}")
+
+```
+
+I used seaborn's clustermap to visualize the correlation matrix of the features as well as to organize them in clusters based on their similarity.
+```{python}
+corr = X_train.corr()
+
+g = sns.clustermap(
+    X_train.corr(),
+    cmap="coolwarm",
+    center=0,
+    figsize=(20, 20),
+    xticklabels=True,
+    yticklabels=True
+)
+plt.show()
+```
+
+Later on, I might consider removing some of the highly correlated features to reduce redundancy and improve model performance.
+
+## Data Preprocessing
+
+The next step before training the model is to preprocess the data.
+
+### Feature Selection
+Based on the clustermap we can see some very dense blocks on the main diagonal. I decided to choose clusters based on these main diagonal blocks and select one feature from each cluster based on the highest ANOVA F-score. This way I can reduce the number of features while retaining the most important information.
+
+Such clustermap can be explained by that fact that some particles are very similar in nature and therefore their measurements are highly correlated. For example, ``RHIRGA672.mean`` and ``RHIRGA336.mean`` are both measurements related to the RHIRGA particle, but at different wavelengths (672 nm and 336 nm respectively). Since they are measuring similar properties of the same particle type, it is expected that their measurements would be correlated.
+
+Therefore reducing number of features would not lead to significant loss of information while also reducing the risk of overfitting and improving model interpretability.
+
+```{python}
+#|include: false
+order = g.dendrogram_row.reordered_ind
+M = X_train.iloc[order, order].values
+
+Z = g.dendrogram_row.linkage
+merge_dist = Z[:, 2]
+
+# Detect big jumps
+diff = np.diff(merge_dist)
+cut = np.percentile(merge_dist, 65)   # try 55–70
+
+labels = fcluster(Z, t=cut, criterion="distance")
+labels_reordered = labels[g.dendrogram_row.reordered_ind]
+
+pd.Series(labels_reordered).value_counts().sort_index()
+```
+
+```{python}
+labels = labels_reordered
+
+cluster_to_features = {}
+
+for pos, cluster_id in enumerate(labels):
+    orig_idx = order[pos]
+    cluster_to_features.setdefault(cluster_id, []).append(orig_idx)
+
+best_features = {}
+
+for cluster_id, feature_ids in cluster_to_features.items():
+    scores = f_scores[feature_ids]
+    best = feature_ids[np.argmax(scores)]
+    best_features[cluster_id] = best
+
+selected_feature_indices = list(best_features.values())
+
+print(f"Selected {len(selected_feature_indices)} features from 100 original features.")
+```
+
+36 is the number of bright red clusters (very high correlation) on the clustermap main diagonal.
+
+### Standardization
+Features have different scales which can affect the performance of some machine learning algorithms. Therefore, it is important to normalize the features before training a model. For the models which require standardized data (Logistic Regression, SVM, kNN) I used ``sklearn``'s ``StandardScaler`` to standardize the features to have mean 0 and standard deviation 1."
+
+```{python}
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns)
+X_train_selected_scaled = X_train_scaled.iloc[:, selected_feature_indices]
+X_test_scaled = scaler.transform(test)
+X_test_scaled = pd.DataFrame(X_test_scaled, columns=test.columns)
+X_test_selected_scaled = X_test_scaled.iloc[:, selected_feature_indices]
+X_train_selected = X_train.iloc[:, selected_feature_indices]
+X_test_selected = test.iloc[:, selected_feature_indices]
+```
+
+{{< pagebreak >}}
+
+## Model Training and Evaluation
+
+```{python}
+
+def make_kaggle_scorer(
+    binary_model,
+    multiclass_model,
+    scaler,
+    threshold=0.5,
+    two_step=True
+):
+    def kaggle_scorer_new(X, X_scaled, y_true):
+        # ----- Binary step -----
+        p_event = binary_model.predict_proba(X if two_step else X_scaled)[:, 1]
+
+        # ----- Multiclass step -----
+        y_pred = np.array(["nonevent"] * len(X), dtype=object)
+        event_idx = p_event >= threshold
+
+        if event_idx.any():
+            y_pred[event_idx] = multiclass_model.predict(X.loc[event_idx])
+
+        # ----- Build Kaggle-style frames -----
+        solution = pd.DataFrame({
+            "class4": y_true.values
+        })
+
+        submission = pd.DataFrame({
+            "class4": y_pred,
+            "p": p_event
+        })
+
+        return kaggle_score(solution, submission, row_id_column_name="id")
+
+    return kaggle_scorer_new
+```
+
+
+
+Firstly I implemented the NFP Aggregate Scorer as described in the project instructions.
+
+```{python}
+def npf_aggregate_scorer(estimator, X, y_true, nonevent_label="nonevent", eps=1e-15):
+    y_pred = estimator.predict(X)
+    proba = estimator.predict_proba(X)
+    classes = np.array(estimator.classes_)
+
+    multiclass_acc = np.mean(y_pred == y_true)
+
+    y_true_event = (np.array(y_true) != nonevent_label)
+
+    nonevent_idx = int(np.where(classes == nonevent_label)[0][0])
+    p_nonevent = proba[:, nonevent_idx]
+    p_event = 1.0 - p_nonevent
+
+    y_pred_event = (p_event >= 0.5)
+    binary_acc = np.mean(y_pred_event == y_true_event)
+
+    pi = np.where(y_true_event, p_event, 1.0 - p_event)
+    pi = np.clip(pi, eps, 1.0)
+    perplexity = float(np.exp(-np.mean(np.log(pi))))
+
+    third_term = max(0.0, min(1.0, 2.0 - perplexity))
+
+    score = (binary_acc + multiclass_acc + third_term) / 3.0
+    return score
+```
+
+```{python}
+#| echo: True
+def kaggle_scorer(estimator, X, y_true):
+    y_pred = estimator.predict(X)
+    y_proba = estimator.predict_proba(X)
+
+    class_idx = {c: i for i, c in enumerate(estimator.classes_)}
+    p_pred = np.array([
+        y_proba[i, class_idx[y_pred[i]]]
+        for i in range(len(y_pred))
+    ])
+
+    solution = pd.DataFrame({
+        "class4": y_true.values
+    })
+
+    submission = pd.DataFrame({
+        "class4": y_pred,
+        "p": p_pred
+    })
+
+    return kaggle_score(solution, submission, row_id_column_name="id")
+```
+
+This score will be used to evaluate the model performance during training and hyperparameter tuning. Because it is the same score used in the competition.
+
+### Multi-class Classification
+
+```{python}
+def generate_submission(
+    model,
+    test,
+    data_test,
+    feature_cols,
+    id_col="id",
+    output_path="submission.csv"
+):
+
+    X_test_sel = test[feature_cols]
+
+    y_pred = model.predict(X_test_sel)
+    y_proba = model.predict_proba(X_test_sel)
+
+    class_idx = {c: i for i, c in enumerate(model.classes_)}
+    p_pred = np.array([
+        y_proba[i, class_idx[y_pred[i]]]
+        for i in range(len(y_pred))
+    ])
+
+    submission = pd.DataFrame({
+        "id": data_test[id_col].values,
+        "class4": y_pred,
+        "p": p_pred
+    })
+
+    submission.to_csv(output_path, index=False)
+    return submission
+```
+
+```{python}
+selected_cols = list(best_features.values()) if isinstance(best_features, dict) else list(best_features)
+selected_cols_values = X_train.columns[selected_cols]
+X_sel = X_train.iloc[:, selected_cols]
+
+common_idx = X_sel.index.intersection(y_train.index)
+
+X_sel = X_sel.loc[common_idx]
+y_sel = y_train.loc[common_idx]
+```
+
+I decided to start with random forest classifier as it is a robust and versatile algorithm that can handle multi-class classification problems well. 
+```{python}
+X_train_train, X_train_test, y_train_train, y_train_test = train_test_split(
+    X_sel, y_sel, test_size=0.2, random_state=42, stratify=y_sel
+)
+
+rf = RandomForestClassifier(
+    n_estimators=500,
+    random_state=42,
+    n_jobs=-1,
+    class_weight="balanced_subsample"  # good default if classes are imbalanced
+)
+
+rf.fit(X_train_train, y_train_train)
+
+y_pred = rf.predict(X_train_test)
+```
+
+```{python}
+npf_score = kaggle_scorer(rf, X_train_test, y_train_test)
+print(f"NFP Aggregate Score on test set: {npf_score:.4f}")
+```
+
+As we can see the initial score is not so good. Therefore I used cross-validation to get a better estimate of the model performance. I used ``StratifiedKFold`` with 5 splits to ensure that each fold has a similar class distribution as the whole dataset. This was the parameter distribution tested: 
+
+```{python}
+#| Echo: True
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+param_dist = {
+    "n_estimators": [300, 500, 800],
+    "max_depth": [None, 10, 20, 30],
+    "min_samples_leaf": [1, 3, 5, 10],
+    "min_samples_split": [2, 5, 10],
+    "max_features": ["sqrt", "log2", 0.5],
+}
+```
+
+```{python}
+rf = RandomForestClassifier(
+    random_state=42,
+    n_jobs=-1,
+    class_weight="balanced_subsample"
+)
+
+search = RandomizedSearchCV(
+    estimator=rf,
+    param_distributions=param_dist,
+    n_iter=30,                 # increase if time allows
+    scoring=kaggle_scorer,
+    cv=cv,
+    n_jobs=-1,
+    verbose=2,
+    random_state=42,
+)
+
+search.fit(X_sel, y_train)
+print("Best score:", search.best_score_)
+print("Best parameters:")
+for param, value in search.best_params_.items():
+    print(f"{param}: {value}")
+
+best_model = search.best_estimator_
+```
+
+Overall 0.51 is not a good score for this competition. One of the areas of improvement is to try different algorithms. I decided to try Logistic Regression as it is a simple yet effective algorithm for multi-class classification problems.
+
+```{python}
+#| include: false
+
+generate_submission(
+    best_model,
+    test,
+    data_test,
+    selected_cols_values,
+    id_col="id",
+    output_path="submission_optimized.csv"
+)
+```
+
+
+
+```{python}
+logreg = LogisticRegression(
+    solver="lbfgs",
+    max_iter=5000,
+    class_weight="balanced",
+    n_jobs=-1
+)
+
+param_dist = {
+    "C": [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+}
+
+cv = StratifiedKFold(
+    n_splits=5,
+    shuffle=True,
+    random_state=42
+)
+
+search = RandomizedSearchCV(
+    estimator=logreg,
+    param_distributions=param_dist,
+    n_iter=len(param_dist["C"]),
+    scoring=kaggle_scorer,
+    cv=cv,
+    n_jobs=-1,
+    verbose=2,
+    random_state=42
+)
+
+search.fit(X_train_selected_scaled, y_train)
+print("Best CV score:", search.best_score_)
+print("Best params:", search.best_params_)
+
+best_logreg = search.best_estimator_
+```
+
+```{python}
+#| include: false
+generate_submission(
+    best_logreg,
+    X_test_scaled,
+    data_test,
+    X_train_selected_scaled.columns,
+    id_col="id",
+    output_path="submission_logreg.csv"
+)
+```
+
+The logistic regression model achieved a CV score of approximately 0.49 which is even lower than the random forest model. So I decided that this approach is not effective in general. 
+
+### 2-step Classification
+
+The new approach is to first classify "nonevent" vs "event" and then classify the event class into "Ia", "Ib", "II". Firslty i decided to use the logistic regression for the binary classification step and for the multi-class classification step, I decided to use the random forest classifier. I also split the training data into training and validation sets to evaluate the performance of the models. During the training the same selected features and standardized (for LogReg) data was used.
+
+```{python}
+X_tr, X_val, y_tr, y_val = train_test_split(
+    X_train_selected,
+    y_train,
+    test_size=0.2,
+    random_state=42,
+    stratify=y_train
+)
+X_tr_scaled = scaler.fit_transform(X_tr)
+X_tr_scaled = pd.DataFrame(X_tr_scaled, columns=X_tr.columns)
+X_val_scaled = scaler.fit_transform(X_val)
+X_val_scaled = pd.DataFrame(X_val_scaled, columns=X_val.columns)
+```
+
+I used this setup for Random Forest model training:
+
+```{python}
+#| echo: true
+bin_model = LogisticRegression(
+    max_iter=5000,
+    class_weight="balanced",
+    solver="lbfgs",
+    n_jobs=-1
+)
+
+rf = RandomForestClassifier(
+    n_estimators=500,
+    max_depth=None,
+    class_weight="balanced_subsample",
+    random_state=42,
+    n_jobs=-1
+)
+```
+
+Where ``bin_model`` is trained to classify "nonevent" vs "event" and ``rf`` is trained to classify the event class into "Ia", "Ib", "II".
+
+```{python}
+y_binary = (y_train != "nonevent").astype(int)
+
+logreg = LogisticRegression(
+    max_iter=5000,
+    class_weight="balanced",
+    solver="lbfgs",
+    n_jobs=-1
+)
+
+# logreg.fit(X_tr_scaled, y_tr)
+
+# p_event_train = logreg.predict_proba(X_tr_scaled)[:, 1]
+# p_event_test  = logreg.predict_proba(X_val_scaled)[:, 1]
+
+logreg.fit(X_train_selected_scaled, y_binary)
+
+p_event_train = logreg.predict_proba(X_train_selected_scaled)[:, 1]
+p_event_test  = logreg.predict_proba(X_train_selected_scaled)[:, 1]
+```
+
+```{python}
+#| include: false
+event_mask = y_train != "nonevent"
+
+X_event = X_train_selected.loc[event_mask]
+y_event = y_train.loc[event_mask]
+
+rf = RandomForestClassifier(
+    n_estimators=500,
+    max_depth=None,
+    class_weight="balanced_subsample",
+    random_state=42,
+    n_jobs=-1
+)
+
+rf.fit(X_event, y_event)
+```
+
+```{python}
+EVENT_THRESHOLD = 0.5
+
+final_class = np.array(["nonevent"] * len(X_train_selected_scaled), dtype=object)
+
+event_idx = p_event_test >= EVENT_THRESHOLD
+
+final_class[event_idx] = rf.predict(X_train_selected.loc[event_idx])
+log_reg_rf_score = make_kaggle_scorer(
+    logreg,
+    rf,
+    scaler,
+    threshold=EVENT_THRESHOLD,
+    two_step=False
+)
+print("score:", log_reg_rf_score(
+    X_train_selected,
+    X_train_selected_scaled,
+    y_train
+))
+
+
+```
+
+```{python}
+#| include: false
+submission = pd.DataFrame({
+    "id": data_test["id"],
+    "class4": final_class,
+    "p": p_event_test      # <-- MUST be probability of EVENT
+})
+
+submission.to_csv("submission_2stage.csv", index=False)
+```
+
+This approach yielded a score of approximately 0.73 in kaggle which is a significant improvement over the previous methods. The main idea behind this approach is to break down the complex multi-class classification problem into two simpler problems which can be solved more effectively. There is approxiamtely similar number of "event" and "nonevent" samples in the dataset which makes the binary classification easier. Once the "event" samples are identified, the multi-class classification can be performed on a smaller subset of data which can lead to better performance becuase the model can focus on distinguishing between the different event classes without being distracted by the "nonevent" class.
+
+Furthermore, by using cross-validation and hyperparameter tuning, I decided to optimize both models used in this 2-step approach to improve the overall performance.
+
+#### Logistic Regression
+
+Tuning the Logistic Regression model for the binary classification step:
+```{python}
+#| echo: True
+logreg_param_dist = {
+    "logreg__C": [0.001, 0.01, 0.1, 1, 10, 100]
+}
+```
+
+```{python}
+
+y_binary = (y_train != "nonevent").astype(int)
+
+logreg_pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("logreg", LogisticRegression(
+        max_iter=5000,
+        class_weight="balanced",
+        solver="lbfgs",
+        n_jobs=-1
+    ))
+])
+
+
+cv_bin = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+logreg_search = RandomizedSearchCV(
+    logreg_pipe,
+    param_distributions=logreg_param_dist,
+    n_iter=10,
+    scoring="roc_auc",   # correct metric for binary probability quality
+    cv=cv_bin,
+    n_jobs=-1,
+    random_state=42,
+    verbose=1
+)
+
+logreg_search.fit(X_train_selected, y_binary)
+
+best_logreg = logreg_search.best_estimator_
+print("Best LogReg params:", logreg_search.best_params_)
+
+```
+
+#### Random Forest
+Tuning the Random Forest model for the multi-class classification step:
+
+```{python}
+#| echo: True
+rf_param_dist = {
+    "n_estimators": [300, 500, 800],
+    "max_depth": [None, 10, 20, 30],
+    "min_samples_leaf": [1, 3, 5],
+    "max_features": ["sqrt", "log2", 0.5]
+}
+```
+
+```{python}
+cv_mc = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+rf = RandomForestClassifier(
+    class_weight="balanced_subsample",
+    random_state=42,
+    n_jobs=-1
+)
+
+rf_search = RandomizedSearchCV(
+    rf,
+    param_distributions=rf_param_dist,
+    n_iter=15,
+    scoring="accuracy",   # multiclass accuracy only
+    cv=cv_mc,
+    n_jobs=-1,
+    random_state=42,
+    verbose=1
+)
+
+rf_search.fit(X_event, y_event)
+
+best_rf = rf_search.best_estimator_
+print("Best RF params:")
+for param, value in rf_search.best_params_.items():
+    print(f"{param}: {value}")
+
+```
+
+```{python}
+#| include: false
+# Fit binary model on full data
+best_logreg.fit(X_train_selected, y_binary)
+p_event_test = best_logreg.predict_proba(X_test_selected)[:, 1]
+
+# Fit multiclass model on full event data
+best_rf.fit(X_event, y_event)
+
+best_threshold = 0.5  # could be optimized further using validation set
+
+final_class = np.array(["nonevent"] * len(X_test_selected), dtype=object)
+event_idx = p_event_test >= best_threshold
+final_class[event_idx] = best_rf.predict(X_test_selected.loc[event_idx])
+
+submission = pd.DataFrame({
+    "id": data_test["id"],
+    "class4": final_class,
+    "p": p_event_test
+})
+
+submission.to_csv("submission_2stage_cv.csv", index=False)
+```
+
+```{python}
+new_scorer = make_kaggle_scorer(
+    best_logreg,
+    best_rf,
+    scaler,
+    threshold=best_threshold,
+    two_step=True
+)
+print("Final 2-stage model score:", new_scorer(
+    X_train_selected,
+    X_train_selected_scaled,
+    y_train
+))
+```
+
+The CV approach resulted in 0.77 in public score however the private score was lower at 0.70. This indicates some overfitting to the public leaderboard data. 
+
+I decided to test other algorithms for the multi-class classification step such as SVM  and kNN to see if they can yield better results. 
+
+#### SVM
+I used simliar setup for SVM model training as in the Random Forest case:
+
+```{python}
+y_binary = (y_train != "nonevent").astype(int)
+event_mask = (y_train != "nonevent")
+
+X_event = X_train_selected.loc[event_mask]
+y_event = y_train.loc[event_mask]
+```
+
+```{python}
+#| echo: True
+bin_model = Pipeline([
+    ("scaler", StandardScaler()),
+    ("logreg", LogisticRegression(
+        max_iter=5000,
+        class_weight="balanced",
+        solver="lbfgs",
+        n_jobs=-1
+    ))
+])
+
+svm_model = Pipeline([
+    ("scaler", StandardScaler()),
+    ("svm", LinearSVC(
+        C=0.02,
+        class_weight="balanced",
+        random_state=42
+    ))
+])
+```
+
+```{python}
+bin_model.fit(X_train_selected, y_binary)
+
+svm_model.fit(X_event, y_event)
+
+EVENT_THRESHOLD = 0.5
+
+p_event_test = bin_model.predict_proba(X_test_selected)[:, 1]
+final_class = np.array(["nonevent"] * len(X_test_selected), dtype=object)
+
+event_idx = p_event_test >= EVENT_THRESHOLD
+if event_idx.any():
+    final_class[event_idx] = svm_model.predict(X_test_selected.loc[event_idx])
+
+submission = pd.DataFrame({
+    "id": data_test["id"].values,
+    "class4": final_class,
+    "p": p_event_test
+})
+
+submission.to_csv("submission_2stage_svm.csv", index=False)
+
+```
+
+
+
+The SVM model achives a score of 0.726 in kaggle which is slightly lower than the random forest model. So I turned to kNN as the final try.
+
+#### kNN
+
+For kNN I started with Cross-Validation and hyperparameter tuning straith from the begining to find best k and other parameters:
+
+```{python}
+#| echo: true
+param_dist = {
+    "knn__n_neighbors": list(range(1, 51, 2)),
+    "knn__weights": ["uniform", "distance"],
+    "knn__p": [1, 2],                               
+    "knn__leaf_size": [10, 20, 30, 40, 60]
+}
+```
+
+The model setup was similar to previous cases. With ``bin_model`` for binary classification and ``kNN`` for multi-class classification.
+
+
+```{python}
+#| include: false
+knn_pipe = Pipeline([
+    ("scaler", StandardScaler()),
+    ("knn", KNeighborsClassifier())
+])
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+search = RandomizedSearchCV(
+    estimator=knn_pipe,
+    param_distributions=param_dist,
+    n_iter=40,              
+    scoring="accuracy",
+    cv=cv,
+    n_jobs=-1,
+    verbose=2,
+    random_state=42
+)
+
+search.fit(X_event, y_event)
+
+best_knn = search.best_estimator_
+```
+
+```{python}
+print("Best kNN params:")
+for param, value in search.best_params_.items():
+    print(f"{param}: {value}")
+```
+
+```{python}
+
+# binary target
+y_binary = (y_train != "nonevent").astype(int)
+
+binary_model = Pipeline([
+    ("scaler", StandardScaler()),
+    ("logreg", LogisticRegression(
+        max_iter=5000,
+        class_weight="balanced",
+        solver="lbfgs",
+        n_jobs=-1
+    ))
+])
+
+binary_model.fit(X_train_selected, y_binary)
+
+best_knn.fit(X_event, y_event)
+
+p_event_test = binary_model.predict_proba(X_test_selected)[:, 1]
+
+final_class = np.array(["nonevent"] * len(X_test_selected), dtype=object)
+event_idx = p_event_test >= EVENT_THRESHOLD
+
+if event_idx.any():
+    final_class[event_idx] = best_knn.predict(X_test_selected.loc[event_idx])
+
+submission = pd.DataFrame({
+    "id": data_test["id"].values,
+    "class4": final_class,
+    "p": p_event_test
+})
+
+submission.to_csv("submission_logreg_knn.csv", index=False)
+```
+
+The kNN model achieved a score of 0.731 is the second best score among the models tested.
+
+{{< pagebreak >}}
+
+## Conclusion
+
+Overall we can see that the idea of 2-step approach for solving this problem turns out much more effective than trying to solve the multi-class classification problem directly. By breaking down the problem into simpler sub-problems, we can achieve better performance and more accurate predictions. 
+
+The direct approach didn't not yeaild scores better than 0.51 while the 2-step approach achieved scores up to 0.73594 in kaggle. This result was achieved by using Logistic Regression for the binary classification step and Random Forest for the multi-class classification step.
+
+Changes in the models used in each step and use of hyperparameter tuning with cross-validation also helped to improve the performance further, however the improvments had really small margins.
+
+## Self-assessment
+
+Overall different approaches were tried and the best one was selected based on empirical results. The code is well documented and organized into sections for better readability. The models were evaluated using appropriate metrics and cross-validation techniques to ensure robustness. Hyperparameter tuning was performed to optimize model performance. 
+
+Understanding of the specifications of the problem was shown in the feature selection section where correlated features were reduced to avoid redundancy.
+
+The final score achieved in kaggle was 0.73594 which is a good result for this competition. However, there is still room for improvement as the best score was 0.78. 
+
+All the deliverables were submitted on time.
+
+I would rate this project as 5 or 4.
+
+
