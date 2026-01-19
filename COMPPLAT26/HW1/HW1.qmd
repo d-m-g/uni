@@ -1,0 +1,62 @@
+---
+title: "Exercise Set 1"
+format: pdf
+execute: 
+  echo: false
+  warning: false
+  error: true
+---
+
+### Exercise 1
+
+a) I chose MacOS as my operating system. As it is the one I am using on my personal computer.
+b) Running processes in MacOS can be viewed using the "Activity Monitor" application.
+c) I chose "Code" or Visual Studio Code as my process. Relevant information includes:
+   - Name: Code
+   - User: dmitriigorovoi
+   - Process ID (PID): 54820
+   - CPU usage: 4,1%
+   - CPU time: 19.21
+   - Memory usage: 125,8 MB
+   - Number of threads: 46
+
+### Exercise 2
+
+a) When process is created this happens:
+- Assign an identity: create a new process ID (PID).
+- Create and initialize the process control block (PCB).
+- Set up the execution context: initialize the program counter, registers, stack pointer, and initial CPU context so it can run.
+- Provide resources and address space: create the process address space , set up memory mappings, and apply limits/permissions.
+- Inherit or attach OS objects: copy or share things like open files, current directory, environment, credentials, and IPC handles depending on the creation method.
+- Make it schedulable: set state to Ready and place it into the appropriate scheduler queue(s) so it can be dispatched.
+
+b) 
+- Normal completion: The program finishes its work and calls an exit routine 
+- Error or exception: The process hits a runtime error the OS cannot safely recover from, like an illegal instruction, segmentation fault, divide-by-zero, or failed protection check.
+- Killed by another entity: A user, administrator, parent process, or the OS requests termination 
+
+### Exercise 3
+
+a) 
+To be able to resume the process exactly where it stopped, the OS must save the user-visible CPU context:
+- R0, R1, R2, R3 (general registers)
+- SP (stack pointer)
+- FP (frame pointer)
+- Return address for the user code
+
+b) 
+When an interrupt occurs while a user process is running, the TOY CPU automatically:
+1. Copies PC -> EPC (saves where the user process should resume)
+2. Loads PC with the interrupt handler address
+3. Switches to system mode
+4. Starts executing the interrupt handler
+
+c)
+1. Restores the saved user registers (R0-R3, SP, FP) from the PCB
+2. Ensures the saved return address is in EPC
+3. Executes the special “return to user” instruction, which:
+    - Copies EPC -> PC
+    - Switches to user mode
+    - Continues execution at that PC (right after the interrupted instruction)
+
+### Exercise 4
