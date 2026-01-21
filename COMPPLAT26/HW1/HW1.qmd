@@ -60,3 +60,65 @@ c)
     - Continues execution at that PC (right after the interrupted instruction)
 
 ### Exercise 4
+
+a)
+
+![](im1.jpg)
+
+b)
+
+1)
+Expected 100% 
+As there are no I/O operations
+
+When ran ``./process-run.py -l 5:100,5:100 -c -p``, the output was:
+
+![](im2.jpg)
+
+which matches the expectation.
+
+
+2)
+Expected 4 + 1 + 5 + 1 = 11 ticks
+Where 4 ticks for 1st process, 1 tick to run I/O, for 5 ticks process is blocked because of the I/O, and 1 tick to run I/O Done
+
+When ran ``./process-run.py -l 4:100,1:0 -c -p``, the output was:
+
+![](im3.jpg)
+
+which matches the expectation.
+
+### Exercise 5
+
+3)
+WHen the order is switched processes can run in parallel, meaning that while one process is waiting for I/O the other process can use the CPU.
+
+When ran ``./process-run.py -l 1:0,4:100 -c -p``, the output was:
+
+![](im4.jpg)
+
+4)
+When -S SWITCH_ON_END is used CPU won't switch to another process until I/O is done so the time will be the sane as in number 2. 
+
+When ran ``./process-run.py -l 1:0,4:100 -c -p -S SWITCH_ON_END``, the output was:
+
+![](im5.jpg)
+
+
+5)
+When -S SWITCH_ON_IO is used CPU will switch to another process as soon as I/O starts so the time will be the same as in number 3. 
+
+6) 
+When -I IO_RUN_LATER is used io_done will done after CPU processes finish which means long waiting time (when process is READY but io_done was not called yet). The resources are not effectively used as PID 0 is idle for a while.
+
+When ran ``./process-run.py -l 3:0,5:100,5:100,5:100 -S SWITCH_ON_IO -I IO_RUN_LATER -c -p``, the output was:
+
+![](im6.jpg)
+
+
+7)
+When -I IO_RUN_IMMEDIATE is used io_done will be called as soon as I/O finishes which means next I/O can start right away after previous one finishes. The resources are used more effectively as PID 0 is idle for a shorter time. This allows to more overlap between CPU and I/O operations.
+
+When ran ``./process-run.py -l 3:0,5:100,5:100,5:100 -S SWITCH_ON_IO -I IO_RUN_IMMEDIATELY -c -p``, the output was:
+
+![](im7.jpg)
