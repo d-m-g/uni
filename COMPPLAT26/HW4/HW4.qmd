@@ -1,0 +1,117 @@
+---
+title: "Exercise Set 4"
+format: pdf
+execute: 
+  echo: false
+  warning: false
+  error: true
+---
+
+
+
+
+1) AWS vs Google Cloud vs Azure
+
+A. What services can you use for free?
+
+Amazon Web Services (AWS) - AWS Free Tier includes a mix of “always free” services plus a free plan with credits for new accounts.  ￼
+
+Google Cloud (GCP) - Google Cloud offers selected products free within monthly Free Tier limits, plus product-specific trials.  ￼
+
+Microsoft Azure (Azure) - Azure provides two types of free services: some free for the first 12 months and many always-free up to monthly limits.  ￼
+
+B. How much does it cost to run a VM for one day? (non-free plan)
+
+Example 1: 2 vCPU, 8 GB RAM (general purpose)
+
+| Provider | Example VM type     | On-demand $/hour | Cost for 24h   |
+|---------:|----------------------|----------------:|---------------:|
+| AWS      | m6i.large            | $0.096/hr       | $2.304/day     |
+| Azure    | D2s v5               | $0.096/hr       | $2.304/day     |
+| GCP      | n2-standard-2        | $0.0971/hr      | $2.3304/day    |
+
+Example 2: 4 vCPU, 16 GB RAM (general purpose)
+
+| Provider | Example VM type     | On-demand $/hour | Cost for 24h   |
+|---------:|----------------------|----------------:|---------------:|
+| AWS      | m6i.xlarge           | $0.192/hr       | $4.608/day     |
+| Azure    | D4s v5               | $0.192/hr       | $4.608/day     |
+| GCP      | n2-standard-4        | $0.1942/hr      | $4.6608/day    |
+⸻
+
+C. How much does storage cost?
+
+To compare “object storage” across clouds (the closest apples-to-apples): AWS S3 vs Azure Blob vs Google Cloud Storage.
+
+| Provider   | Storage product                   | Example price (per GB-month)                                                                 |
+|---------:|----------------------------------------------------|----------------------------------------------------------------------------------------------|
+| AWS      | S3 Standard                                         | $0.023/GB-month (first 50 TB)                                                                |
+| Azure    | Blob Storage Hot (pay-as-you-go example)            | ~$0.0208/GB-month (example shown in Microsoft Learn)                                         |
+| GCP      | Cloud Storage Standard                              | Pricing varies by location class; see GCP pricing pages (regional/dual-region have different rates) |
+
+
+D. Compare prices and expected performance of different VM offerings. Is price linear with performance?
+
+Within the same family and generation, price is often close to linear when you scale vCPU and RAM proportionally:
+
+	- 2 vCPU/8 GB to 4 vCPU/16 GB roughly doubles price across AWS, Azure, and GCP in the examples above.  ￼
+
+E. Which of the three is best?
+
+A defensible “no single best” answer (typical in coursework):
+
+	- AWS tends to win on breadth of service and ecosystem maturity
+	- Azure is often best if your company is deeply invested in Microsoft enterprise stack (AD, Windows, MS security/governance) and wants tight integration.
+	- GCP is often strongest for data analytics and ML-heavy teams
+
+F. If your company wants to start using cloud, which would you pick and why?
+
+A solid default choice:
+
+	- Pick AWS if you want the widest service catalog, the biggest hiring pool, and lots of reference architectures.
+	- Pick Azure if you’re Microsoft-heavy (identity, security policies, Windows workloads, M365 integration).
+	- Pick GCP if your early roadmap is dominated by data/ML pipelines and you want tight integration with Google’s data tooling.
+
+
+2) Would cloud computing have taken off like this without virtualization?
+
+Probably not at anything like today’s scale.
+
+Why:
+
+	- Virtualization (VMs, and later containers) makes multi-tenancy safe enough (isolation), enables elastic provisioning (spin up/down quickly), and allows efficient resource pooling (high utilization).
+	- Without it, cloud would look more like “hosted dedicated servers” - slower to provision, harder to automate, and more expensive because providers couldn’t multiplex workloads effectively.
+
+
+
+3-5) Armbrust et al. (2010)
+
+1. Availability / Business Continuity - Partially true
+Cloud availability improved massively (multi-zone, multi-region, managed failover), but major outages still happen and customers still need resilience design.
+
+2. Data Lock-in - Mostly true
+Containers, Kubernetes, Terraform, and open APIs reduce lock-in for basic compute, but managed services (databases, event systems, IAM, observability) still create strong lock-in - and data egress costs reinforce it.
+
+3. Data Confidentiality and Auditability - Partially true
+Security tooling is far better (encryption, KMS/HSM, IAM, logging, compliance), yet confidentiality and auditability remain central concerns, especially for regulated industries and sensitive data.
+
+4. Data Transfer Bottlenecks - Partially true
+Networks are faster, and physical transfer appliances exist, but large dataset movement, cross-region replication, and egress remain bottlenecks (cost and latency).
+
+5. Performance Unpredictability - Partially true
+Better instance isolation options exist (dedicated hosts, premium SKUs), but shared infrastructure and noisy-neighbor effects haven’t disappeared, especially for storage and multi-tenant services.
+
+6. Scalable Storage - Mostly true
+This is one area where cloud clearly delivered: object storage and managed storage systems scale elastically and are operationally simpler than most on-prem alternatives.
+
+7. Bugs in Large Distributed Systems - Mostly true
+Still a fundamental issue. Systems are bigger and more complex; the industry improved practices (SRE, chaos engineering), but distributed failure modes remain hard.
+
+8. Scaling Quickly - Mostly true
+Elasticity is real, and automation is strong (autoscaling, IaC), but organizational bottlenecks (quotas, architecture, cost controls, governance) often limit “instant scaling” in real companies.
+
+9. Reputation Fate Sharing - Partially true
+Clouds are better isolated than before, but shared dependencies still bite (shared identity providers, common SaaS outages, shared IP reputation, misconfigurations).
+
+10. Software Licensing - Partially true
+A lot moved to subscription and consumption pricing, but licensing is still messy (BYOL rules, core-based licensing, marketplace images, audit risk).
