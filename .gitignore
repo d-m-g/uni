@@ -2,3 +2,5 @@
 venv/
 .ipynb_checkpoints/
 _quarto.yaml
+/.quarto/
+**/*.quarto_ipynb

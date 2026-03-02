@@ -5,6 +5,7 @@ execute:
   echo: true
   warning: false
   error: true
+jupyter: uni-venv
 ---
 
 ## 1. Readers/Writers with priorities (given Python code)
@@ -19,7 +20,7 @@ No. A reader only waits while there is an active writer (`len(writers) > 0`). Wh
 ### 1(b) Who has higher priority and why?
 Readers have higher priority.
 Reason: writers are blocked not only by active readers/writers, but also by waiting readers:
-```{python}
+```
 while len(writers) + len(readers) + waitingreaders > 0:
 ```
 
@@ -28,9 +29,10 @@ So even if no one is currently reading, queued readers prevent writers from star
 1(c) Modify the code so that writers have priority
 
 Writer-priority policy:
-	•	A reader waits if a writer is active OR if any writers are waiting.
-	•	When finishing, wake writers first.
+	-	A reader waits if a writer is active OR if any writers are waiting.
+	-	When finishing, wake writers first.
 
+```{python}
 import threading
 
 readers = set()
@@ -42,7 +44,6 @@ lock = threading.Lock()
 oktoread = threading.Condition(lock)
 oktowrite = threading.Condition(lock)
 
-```{python}
 def reader():
     global waitingreaders, waitingwriters
     name = threading.current_thread().name
@@ -94,10 +95,10 @@ No. Once any writer is waiting, new readers stop entering, and writers will even
 
 2. Deadlock
 
-Threads (from the sheet  ￼):
-	•	T1: get(A) get(B) get(C)
-	•	T2: get(D) get(E) get(B)
-	•	T3: get(C) get(F) get(D)
+Threads (from the sheet):
+-	T1: get(A) get(B) get(C)
+-	T2: get(D) get(E) get(B)
+-	T3: get(C) get(F) get(D)
 
 2(a) Show possibility of deadlock (cycle)
 
@@ -107,9 +108,9 @@ One deadlocking interleaving:
 	3.	T2 acquires D, then E
 	4.	Next requests:
 
-	•	T1 requests C (held by T3)
-	•	T3 requests D (held by T2)
-	•	T2 requests B (held by T1)
+-	T1 requests C (held by T3)
+-	T3 requests D (held by T2)
+-	T2 requests B (held by T1)
 
 Cycle:
 T1 holds B and waits for C
@@ -120,9 +121,9 @@ So deadlock is possible.
 2(b) Reorder gets inside threads to prevent deadlock
 
 Impose a global resource order, e.g. A < B < C < D < E < F, and request resources only in increasing order:
-	•	T1: A, B, C
-	•	T2: B, D, E
-	•	T3: C, D, F
+-	T1: A, B, C
+-	T2: B, D, E
+-	T3: C, D, F
 
 This prevents cycles in the wait-for graph.
 
@@ -135,15 +136,15 @@ The questions and simulator usage are in the OSTEP SSD chapter homework.
 This produces 10 random operations against a log-structured SSD. With -q, commands are hidden, so infer them from mapping/validity changes. Use -c or -C to reveal the exact operations and verify.
 
 What to submit:
-	•	The 10 commands produced by seed 1 (from -c or -C)
-	•	Short reasoning showing how each affects mapping and page validity
+-	The 10 commands produced by seed 1 (from -c or -C)
+-	Short reasoning showing how each affects mapping and page validity
 
 3.2 (Q2) -T log -s 2 -n 10 -C
 
 Commands are shown (-C). Track after each command:
-	•	logical-to-physical mapping updates
-	•	valid/invalid physical pages
-	•	log write pointer movement
+-	logical-to-physical mapping updates
+-	valid/invalid physical pages
+-	log write pointer movement
 Verify with -F which shows flash state between commands.
 
 3.3 (Q3) Add -r 20
@@ -162,12 +163,12 @@ Direct updates are expensive on flash because overwrites require erases (and oft
 
 4. UNIX file management (inode addressing)
 
-Given (from the sheet  ￼):
-	•	Block size = 8 KB = 8192 bytes
-	•	12 direct pointers
-	•	single, double, triple indirect
-	•	pointer size = 4 bytes
-	•	pointer has 8-bit disk id + 24-bit block id
+Given (from the sheet):
+- Block size = 8 KB = 8192 bytes
+- 12 direct pointers
+- single, double, triple indirect
+- pointer size = 4 bytes
+- pointer has 8-bit disk id + 24-bit block id
 
 Pointers per indirect block:
 8192 / 4 = 2048 pointers
@@ -175,10 +176,10 @@ Pointers per indirect block:
 4(a) Maximum file size
 
 Data blocks addressable:
-	•	direct: 12
-	•	single: 2048
-	•	double: 2048^2 = 4,194,304
-	•	triple: 2048^3 = 8,589,934,592
+- direct: 12
+- single: 2048
+- double: 2048^2 = 4,194,304
+- triple: 2048^3 = 8,589,934,592
 Total blocks = 12 + 2048 + 4,194,304 + 8,589,934,592 = 8,594,130,956
 
 Max file size:
@@ -212,21 +213,20 @@ Total disk accesses: 2
 5. Storing one file per network packet
 
 5(a) Disadvantages
-	•	Massive metadata overhead (inode + dir entry per packet)
-	•	High syscall and fsync/open/close overhead per packet
-	•	Directories become huge and slow to list/search/backup
-	•	Fragmentation and poor locality from many tiny writes
-	•	Analytics is slower than streaming from a single structured log
+- Massive metadata overhead (inode + dir entry per packet)
+- High syscall and fsync/open/close overhead per packet
+- Directories become huge and slow to list/search/backup
+- Fragmentation and poor locality from many tiny writes
+- Analytics is slower than streaming from a single structured log
 
 5(b) Why the system could crash
-	•	Running out of inodes even if disk space remains
-	•	Disk fills due to metadata + journaling overhead
-	•	File system/kernel stress from huge directory trees and metadata churn
-	•	Hitting system limits (e.g., too many open files)
+- Running out of inodes even if disk space remains
+- Disk fills due to metadata + journaling overhead
+- File system/kernel stress from huge directory trees and metadata churn
+- Hitting system limits (e.g., too many open files)
 
 5(c) Better organization
-	•	Append packets into large rotating log files (time-based or size-based)
-	•	Use standard capture formats like pcap/pcapng or a simple binary log
-	•	Store logs in time-hierarchy folders (YYYY/MM/DD/HH) to keep dirs small
-	•	Compress older chunks and maintain an index for lookup
-
+- Append packets into large rotating log files (time-based or size-based)
+- Use standard capture formats like pcap/pcapng or a simple binary log
+- Store logs in time-hierarchy folders (YYYY/MM/DD/HH) to keep dirs small
+- Compress older chunks and maintain an index for lookup
